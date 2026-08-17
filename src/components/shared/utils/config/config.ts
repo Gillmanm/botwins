@@ -103,10 +103,19 @@ export const generateOAuthURL = async (prompt?: string): Promise<string> => {
         const clientId = process.env.NEXT_PUBLIC_DERIV_APP_ID;
         if (!clientId) return '';
 
+        const redirectUri =
+            process.env.NEXT_PUBLIC_DERIV_REDIRECT_URI || window.location.origin;
+        const configuredScopes = process.env.NEXT_PUBLIC_DERIV_OAUTH_SCOPES || 'trade account_manage';
+        const scopes = configuredScopes
+            .split(',')
+            .map(scope => scope.trim())
+            .filter(Boolean)
+            .join(' ');
+
         const config: AuthConfig = {
             clientId,
-            redirectUri: window.location.origin,
-            scopes: 'trade',
+            redirectUri,
+            scopes,
         };
 
         // Static referral link (fallback for direct visits without affiliate click)
