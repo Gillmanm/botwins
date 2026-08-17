@@ -152,20 +152,20 @@ export function validateCallback(params: CallbackParams, redirectUri: string): s
  * Exchange authorization code for access and refresh tokens.
  */
 export async function exchangeCodeForTokens(params: TokenExchangeParams): Promise<AuthInfo> {
-  // Deriv's OAuth documentation requires the authorization-code exchange
-  // to happen on a backend. Calling the token endpoint directly from the
-  // browser is blocked in some deployments by CORS and exposes a fragile
-  // cross-origin dependency. The Vercel function keeps this request same-origin
-  // and forwards it server-to-server.
-  const response = await fetch('/api/oauth/token', {
+  // Match the working Accumulator OAuth flow: Deriv expects a
+  // form-encoded PKCE authorization-code exchange at its token endpoint.
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code: params.code,
+    client_id: params.clientId,
+    redirect_uri: params.redirectUri,
+    code_verifier: params.codeVerifier,
+  });
+
+  const response = await fetch(`${getAuthBaseUrl()}/token`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      code: params.code,
-      client_id: params.clientId,
-      redirect_uri: params.redirectUri,
-      code_verifier: params.codeVerifier,
-    }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
   });
 
   if (!response.ok) {
