@@ -36,6 +36,8 @@ const PreviewBranding =
 const AppContent = observer(() => {
     const [is_api_initialized, setIsApiInitialized] = React.useState(false);
     const [is_loading, setIsLoading] = React.useState(true);
+    const active_symbols_timeout = React.useRef(null);
+    const active_symbols_interval = React.useRef(null);
 
     const store = useStore();
     const { app, transactions, common, client } = store;
@@ -84,6 +86,25 @@ const AppContent = observer(() => {
             common.setSocketOpened(false);
         }
     }, [common, connectionStatus]);
+
+    // The logged-out shell must remain usable even when DerivWS is slow or temporarily
+    // unavailable. Login/signup can recover the authenticated connection later.
+    React.useEffect(() => {
+        const startup_timeout = window.setTimeout(() => {
+            if (!is_api_initialized) {
+                setIsApiInitialized(true);
+                botNotification(
+                    localize(
+                        'The server is taking longer than expected. You can continue, but trading data may be unavailable until it reconnects.'
+                    ),
+                    undefined,
+                    { type: 'warning' }
+                );
+            }
+        }, 8000);
+
+        return () => window.clearTimeout(startup_timeout);
+    }, [is_api_initialized]);
 
     const { current_language } = common;
     const html = document.documentElement;
@@ -139,26 +160,50 @@ const AppContent = observer(() => {
     const changeActiveSymbolLoadingState = () => {
         init();
 
+        if (active_symbols_timeout.current) window.clearTimeout(active_symbols_timeout.current);
+        if (active_symbols_interval.current) window.clearInterval(active_symbols_interval.current);
+
+        let finished = false;
+        const finishLoading = () => {
+            if (finished) return;
+            finished = true;
+            if (active_symbols_timeout.current) window.clearTimeout(active_symbols_timeout.current);
+            if (active_symbols_interval.current) window.clearInterval(active_symbols_interval.current);
+            setIsLoading(false);
+        };
+
         const retrieveActiveSymbols = () => {
             const { active_symbols } = ApiHelpers.instance;
 
-            active_symbols.retrieveActiveSymbols(true).then(() => {
-                setIsLoading(false);
-            });
+            Promise.resolve(active_symbols.retrieveActiveSymbols(true))
+                .catch(error => {
+                    console.warn('Active symbols unavailable during startup:', error);
+                    botNotification(
+                        localize('Trading data is temporarily unavailable. You can still log in and try again.'),
+                        undefined,
+                        { type: 'warning' }
+                    );
+                })
+                .finally(finishLoading);
         };
 
         if (ApiHelpers?.instance?.active_symbols) {
             retrieveActiveSymbols();
         } else {
-            // This is a workaround to fix the issue where the active symbols are not loaded immediately
-            // when the API is initialized. Should be replaced with RxJS pubsub
-            const intervalId = setInterval(() => {
-                if (ApiHelpers?.instance?.active_symbols) {
-                    clearInterval(intervalId);
-                    retrieveActiveSymbols();
-                }
+            // Do not wait forever if the API helper is delayed or the socket is unavailable.
+            active_symbols_interval.current = window.setInterval(() => {
+                if (ApiHelpers?.instance?.active_symbols) retrieveActiveSymbols();
             }, 1000);
         }
+
+        active_symbols_timeout.current = window.setTimeout(() => {
+            botNotification(
+                localize('Server connection timed out. The app is ready, but trading data will load after reconnection.'),
+                undefined,
+                { type: 'warning' }
+            );
+            finishLoading();
+        }, 12000);
     };
 
     React.useEffect(() => {
@@ -178,6 +223,13 @@ const AppContent = observer(() => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [is_api_initialized, client.loginid]);
+
+    React.useEffect(() => {
+        return () => {
+            if (active_symbols_timeout.current) window.clearTimeout(active_symbols_timeout.current);
+            if (active_symbols_interval.current) window.clearInterval(active_symbols_interval.current);
+        };
+    }, []);
 
     if (common?.error) return null;
 
