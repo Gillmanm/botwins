@@ -134,6 +134,9 @@ export class DerivWSAccountsService {
                 const response = await fetch(endpoint, {
                     method: 'GET',
                     headers: {
+                        // Deriv's Options REST API requires both the OAuth bearer token
+                        // and the registered application ID on authenticated requests.
+                        'Deriv-App-ID': process.env.NEXT_PUBLIC_DERIV_APP_ID || '',
                         Authorization: `Bearer ${accessToken}`,
                     },
                 });
@@ -198,6 +201,9 @@ export class DerivWSAccountsService {
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
+                        // Deriv's Options REST API requires both the OAuth bearer token
+                        // and the registered application ID on authenticated requests.
+                        'Deriv-App-ID': process.env.NEXT_PUBLIC_DERIV_APP_ID || '',
                         Authorization: `Bearer ${accessToken}`,
                     },
                 });
